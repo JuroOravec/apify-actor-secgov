@@ -1,0 +1,9 @@
+version: 1
+schema:
+  crawlers:
+    sec13f:
+      type: cheerio
+      routes:
+        - EDGAR_INDEX_FILE
+        - EDGAR_FILING_DIR
+        - EDGAR_FILING_XML_FILE
