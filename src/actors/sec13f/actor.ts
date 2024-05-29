@@ -18,12 +18,14 @@ export const run = async (crawlerConfig?: CheerioCrawlerOptions): Promise<void> 
       perfBatchWaitSecs: 1,
       maxConcurrency: 1,
       maxRequestsPerMinute: 120,
-      // logLevel: 'debug',
-      maxRequestsPerCrawl: 1000,
       requestHandlerTimeoutSecs: 60 * 5, // 5m
       // REQUIRED to download SEC index files like
       // https://www.sec.gov/Archives/edgar/full-index/2023/QTR1/master.idx
       additionalMimeTypes: ['application/octet-stream'],
+      
+      // FOR TESTING ONLY
+      maxRequestsPerCrawl: 100,
+      logLevel: 'debug',
     },
     hooks: {
       validateInput,

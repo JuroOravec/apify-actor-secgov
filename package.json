@@ -81,7 +81,7 @@
     "cheerio": "^1.0.0-rc.12",
     "commander": "^11.0.0",
     "crawlee": "^3.3.1",
-    "crawlee-one": "^2.0.3",
+    "crawlee-one": "^2.0.4",
     "date-fns": "^2.30.0",
     "got": "^12.6.0",
     "jimp": "^0.22.10",
