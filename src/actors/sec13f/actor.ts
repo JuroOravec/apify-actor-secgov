@@ -24,8 +24,8 @@ export const run = async (crawlerConfig?: CheerioCrawlerOptions): Promise<void> 
       additionalMimeTypes: ['application/octet-stream'],
       
       // FOR TESTING ONLY
-      maxRequestsPerCrawl: 100,
-      logLevel: 'debug',
+      // maxRequestsPerCrawl: 100,
+      // logLevel: 'debug',
     },
     hooks: {
       validateInput,
