@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { spawn, exec } from 'child_process';
 import { program } from 'commander';
 import path from 'path';
 import fsp from 'fs/promises';
@@ -29,13 +29,32 @@ const getAllActors = async () => {
   return actorNames;
 };
 
-const execAsync = (cmd: string) => {
+const execCmd = (cmd: string) => {
+  console.log(cmd);
   return new Promise<string>((res, rej) => {
     const prcs = exec(cmd, (err, output) => {
       err ? rej(err) : res(output);
     });
     // Show stdout live - https://stackoverflow.com/a/30084906/9788634
     prcs.stdout?.pipe(process.stdout);
+  });
+};
+
+// NOTE: Use `spawn` instead of `exec` to avoid errors on long-running
+// tasks
+// RangeError [ERR_CHILD_PROCESS_STDIO_MAXBUFFER]: stdout maxBuffer length exceeded
+const spawnCmd = (cmd: string, cmdArgs?: string[]) => {
+  console.log([cmd, ...(cmdArgs ?? [])].join(" "));
+  return new Promise<void>((res, rej) => {
+    const prcs = spawn(cmd, cmdArgs);
+    // Show stdout live - https://stackoverflow.com/a/30084906/9788634
+    prcs.stdout?.pipe(process.stdout);
+    prcs.on('error', (err)=> {
+      rej(err);
+    });
+    prcs.on('exit', (code, signal) => {
+      if (code != null && code > 0) rej(code);
+    });
   });
 };
 
@@ -57,9 +76,8 @@ program
     const [actorName, ...otherArgs] = inst.args ?? [];
 
     const entrypoint = `${ACTOR_SRC_DIR}/${actorName}/index.ts`;
-    const cmd = `ts-node ${entrypoint} ${otherArgs.join(' ')}`;
-    console.log(cmd);
-    await execAsync(cmd);
+    const cmdArgs = [entrypoint, ...otherArgs];
+    await spawnCmd('ts-node', cmdArgs).catch(console.error);
   });
 
 program
@@ -71,9 +89,8 @@ program
     const [actorName, ...otherArgs] = inst.args ?? [];
 
     const entrypoint = `${ACTOR_DIST_DIR}/${actorName}/index.js`;
-    const cmd = `node ${entrypoint} ${otherArgs.join(' ')}`;
-    console.log(cmd);
-    await execAsync(cmd);
+    const cmdArgs = [entrypoint, ...otherArgs];
+    await spawnCmd('node', cmdArgs).catch(console.error);
   });
 
 program
@@ -90,8 +107,7 @@ program
     for (const actor of actorNames) {
       const dir = `${ACTOR_DIST_DIR}/${actor}/migrations/migrations`;
       const cmd = `npx crawlee-one migrate --dir ${dir} ${otherArgs.join(' ')}`;
-      console.log(cmd);
-      await execAsync(cmd);
+      await execCmd(cmd);
     }
   });
 
@@ -109,8 +125,7 @@ program
     for (const actor of actorNames) {
       const dir = path.normalize(`${ACTOR_DIST_DIR}/${actor}/migrations/migrations`);
       const cmd = `npx crawlee-one unmigrate --dir ${dir} ${otherArgs.join(' ')}`;
-      console.log(cmd);
-      await execAsync(cmd);
+      await execCmd(cmd);
     }
   });
 
@@ -129,8 +144,7 @@ program
       const config = path.normalize(`${ACTOR_DIST_DIR}/${actor}/config.js`);
       const outDir = path.normalize(`${ACTOR_OUT_DIR}/${actor}/.actor`);
       const cmd = `npx apify-actor-config gen --config ${config} --out-dir ${outDir} ${otherArgs.join(' ')}`; // prettier-ignore
-      console.log(cmd);
-      await execAsync(cmd);
+      await execCmd(cmd);
     }
   });
 
@@ -149,8 +163,7 @@ program
       const config = path.normalize(`${ACTOR_DIST_DIR}/${actor}/actorspec.js`);
       const outDir = path.normalize(`${ACTOR_OUT_DIR}/${actor}/.actor`);
       const cmd = `npx actor-spec gen --config ${config} --out-dir ${outDir} ${otherArgs.join(' ')}`; // prettier-ignore
-      console.log(cmd);
-      await execAsync(cmd);
+      await execCmd(cmd);
     }
   });
 
@@ -169,8 +182,7 @@ program
       const scriptPath = path.normalize(`${ACTOR_DIST_DIR}/${actor}/readme.js`);
       // E.g. `node dist/cjs/readme.js`
       const cmd = `node ${scriptPath} ${otherArgs.join(' ')}`;
-      console.log(cmd);
-      await execAsync(cmd);
+      await execCmd(cmd);
     }
   });
 
