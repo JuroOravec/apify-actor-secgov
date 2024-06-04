@@ -4,6 +4,7 @@ import { Actor } from 'apify';
 
 import { sec13fLabel, sec13fRoute } from './__generated__/crawleeone';
 import { isXmlInfoTable, isXmlPrimaryDoc, secClient } from '../../lib/secClient';
+import { randomUUID } from 'crypto';
 
 interface UserData {
   filing: Record<string, any>;
@@ -125,10 +126,42 @@ export const secf13Routes = {
       // There's no more data for us to process, so save the data and leave early
       if (!remainingXmlUrls.length) {
         const entry = { ...filing, ...dataToAdd, xmlUrls };
-        ctx.actor.pushData(entry, {
-          // TODO?
-          privacyMask: {},
-        });
+
+        const origLimitSize = 9_000_000
+        let actualLimitSize = origLimitSize;
+        const entryStr = JSON.stringify(entry)
+        const entrySize = entryStr.length;
+        
+        if (entrySize > actualLimitSize) {
+          const _multipartId = randomUUID();
+          let contentIndex = 0;
+          let partIndex = 0;
+          while (contentIndex < entryStr.length) {
+            const startIndex = contentIndex;
+            const endIndex = contentIndex + actualLimitSize;
+            const partData = {
+              _multipartId,
+              _partIndex: partIndex,
+              _partData: entryStr.slice(startIndex, endIndex),
+            };
+            if (JSON.stringify(partData).length > origLimitSize) {
+              console.log({ msg: "DECRASE LIMIT", partSize: JSON.stringify(partData).length })
+              actualLimitSize -= 1_000_000;
+              continue;
+            }
+            await ctx.actor.pushData(partData, {
+              // TODO?
+              privacyMask: {},
+            });
+            contentIndex += actualLimitSize;
+            partIndex += 1;
+          }
+        } else {
+          await ctx.actor.pushData(entry, {
+            // TODO?
+            privacyMask: {},
+          });
+        }
         return;
       }
 

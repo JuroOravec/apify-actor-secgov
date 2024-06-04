@@ -47,13 +47,22 @@ const spawnCmd = (cmd: string, cmdArgs?: string[]) => {
   console.log([cmd, ...(cmdArgs ?? [])].join(" "));
   return new Promise<void>((res, rej) => {
     const prcs = spawn(cmd, cmdArgs);
-    // Show stdout live - https://stackoverflow.com/a/30084906/9788634
-    prcs.stdout?.pipe(process.stdout);
+
     prcs.on('error', (err)=> {
-      rej(err);
+      rej({err});
     });
     prcs.on('exit', (code, signal) => {
-      if (code != null && code > 0) rej(code);
+      if (code != null && code > 0) rej({code});
+    });
+
+    // https://stackoverflow.com/a/32872753
+    prcs.stdout.setEncoding('utf8');
+    prcs.stdout.on('data', (data) => {
+      console.log(data);
+    });
+    prcs.stderr.setEncoding('utf8');
+    prcs.stderr.on('data', (data) => {
+      console.error(data);
     });
   });
 };

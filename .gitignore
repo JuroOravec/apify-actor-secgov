@@ -3,6 +3,8 @@ lib/*
 esm/*
 umd/*
 
+data/*
+
 # apify
 storage/
 
