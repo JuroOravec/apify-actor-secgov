@@ -1,13 +1,28 @@
 import type { CheerioCrawlingContext } from 'crawlee';
-import { cheerioPortadom, Portadom } from 'portadom';
+import { cheerioPortadom } from 'portadom';
 import { Actor } from 'apify';
+import cheerio from 'cheerio';
 
 import { sec13fLabel, sec13fRoute } from './__generated__/crawleeone';
-import { isXmlInfoTable, isXmlPrimaryDoc, secClient } from '../../lib/secClient';
+import {
+  isXmlInfoTable,
+  isXmlPrimaryDoc,
+  createSecClient,
+  preprocessXml,
+} from '../../lib/secClient';
 
 interface UserData {
   filing: Record<string, any>;
-  xmlUrls: { url: string; type: 'primary_doc' | 'info_table' | 'unknown' }[];
+  xmlUrls: {
+    url: string;
+    type: 'primary_doc' | 'info_table' | 'unknown';
+    // NOTE: We include the XML, so we don't have to scrape SEC again if we need to just
+    // extract some extra fields from the doc.
+    // TODO - store the scraped content automatically, or with a flip of a switch?
+    //      - it should have two options - whether to include it or not (bool),
+    //        and an optional (maybe async) transformation function
+    content: string;
+  }[];
   remainingXmlUrls: string[];
 }
 
@@ -41,6 +56,11 @@ export const secf13Routes = {
       return !!urlObj.pathname.match(URL_REGEX.EDGAR_INDEX_FILE);
     },
     handler: async (ctx) => {
+      const secClient = createSecClient({
+        // @ts-ignore
+        userAgent: ctx.actor.input.secUserAgent,
+      });
+
       const filigns = await secClient.parse13FFilings(ctx.body.toString());
 
       const requests = filigns.map((filing) => ({
@@ -64,7 +84,12 @@ export const secf13Routes = {
       return !!urlObj.pathname.match(URL_REGEX.EDGAR_FILING_DIR);
     },
     handler: async (ctx) => {
-      const { xmlUrls } = await secClient.parse13FFilingDataUrlsFromDirPage(ctx.body as string);
+      const secClient = createSecClient({
+        // @ts-ignore
+        userAgent: ctx.actor.input.secUserAgent,
+      });
+
+      const xmlUrls = await secClient.parse13FFilingDataUrlsFromDirPage(ctx.body as string);
 
       const { filing } = ctx.request.userData as Pick<UserData, 'filing'>;
 
@@ -105,21 +130,35 @@ export const secf13Routes = {
       return !!urlObj.pathname.match(URL_REGEX.EDGAR_FILING_XML_FILE);
     },
     handler: async (ctx) => {
-      const dom = await ctx.parseWithCheerio();
+      const secClient = createSecClient({
+        // @ts-ignore
+        userAgent: ctx.actor.input.secUserAgent,
+      });
+
+      // NOTE: Not great that we parse the XML 3 times (1st by Crawlee, 2nd to strip XML prefixes,
+      // and 3rd to do the *actual* scraping. But good enough for now.
+      const origXml = (await ctx.parseWithCheerio()).xml();
+      const xml = await preprocessXml(origXml);
+      const dom = cheerio.load(xml, {
+        // Options based on Crawlee's internals
+        xmlMode: true,
+        // @ts-expect-error // Internal
+        _useHtmlParser2: true,
+      });
       const rootEl = dom.root();
 
       const { filing, xmlUrls, remainingXmlUrls } = ctx.request.userData as UserData;
 
       let dataToAdd: Record<string, any> = {};
       if (isXmlPrimaryDoc(rootEl)) {
-        xmlUrls.push({ url: ctx.request.url, type: 'primary_doc' });
-        const primaryDocData = await secClient.parsePrimaryDocXml(ctx.body as string);
+        xmlUrls.push({ url: ctx.request.url, type: 'primary_doc', content: xml });
+        const primaryDocData = await secClient.parsePrimaryDocXml(xml);
         dataToAdd = { ...dataToAdd, ...primaryDocData };
       } else if (isXmlInfoTable(rootEl)) {
-        xmlUrls.push({ url: ctx.request.url, type: 'info_table' });
-        dataToAdd.holdings = await secClient.extractHoldingsFromInfoTableXml(ctx.body as string);
+        xmlUrls.push({ url: ctx.request.url, type: 'info_table', content: xml });
+        dataToAdd.holdings = await secClient.extractHoldingsFromInfoTableXml(xml);
       } else {
-        xmlUrls.push({ url: ctx.request.url, type: 'unknown' });
+        xmlUrls.push({ url: ctx.request.url, type: 'unknown', content: xml });
       }
 
       // There's no more data for us to process, so save the data and leave early

@@ -4,30 +4,32 @@ import {
   Field,
   ActorInputSchema,
   createActorOutputSchema,
+  createStringField,
 } from 'apify-actor-config';
 import { AllActorInputs, allActorInputs as _allActorInputs } from 'crawlee-one';
 
 import actorSpec from './actorspec';
 
 export type Sec13fCustomActorInput = {
-  /** No custom fields currently */
+  secUserAgent: string;
 };
 
 /** Shape of the data passed to the actor from Apify */
-export type Sec13fActorInput = Sec13fCustomActorInput &
-  Omit<AllActorInputs, 'ignoreSslErrors'>;
+export type Sec13fActorInput = Sec13fCustomActorInput & Omit<AllActorInputs, 'ignoreSslErrors'>;
 
 const customActorInput = {
   /** No custom fields currently */
-  // listingCountOnly: createBooleanField({
-  //   title: 'Count the total matched results',
-  //   type: 'boolean',
-  //   description: `If checked, no data is extracted. Instead, the count of matched results is printed in the log.`,
-  //   default: false,
-  //   groupCaption: 'Troubleshooting options',
-  //   groupDescription: 'Use these to verify that your custom startUrls are correct',
-  //   nullable: true,
-  // }),
+  secUserAgent: createStringField({
+    title: 'SEC User Agent HTTP Header',
+    type: 'string',
+    editor: 'textfield',
+    description:
+      `Per the SEC Webmaster FAQ, you need to declare your user agent. in following format: <br/> <br/>` +
+      `User-Agent: Sample Company Name AdminContact@<sample company domain>.com <br/> <br/>` +
+      `See https://www.sec.gov/os/webmaster-faq#code-support`,
+    minLength: 1,
+    nullable: true,
+  }),
 } satisfies Record<keyof Sec13fCustomActorInput, Field>;
 
 // Customize the default options
@@ -42,19 +44,19 @@ allActorInputs.maxRequestRetries.prefill = 5;
 allActorInputs.maxConcurrency.default = 1;
 allActorInputs.maxConcurrency.prefill = 1;
 
-const inputSchema = createActorInputSchema<
-  ActorInputSchema<Record<keyof Sec13fActorInput, Field>>
->({
-  schemaVersion: 1,
-  title: actorSpec.actor.title,
-  description: `Configure the ${actorSpec.actor.title}.`,
-  type: 'object',
-  properties: {
-    ...customActorInput,
-    // Include the common fields in input
-    ...allActorInputs,
-  },
-});
+const inputSchema = createActorInputSchema<ActorInputSchema<Record<keyof Sec13fActorInput, Field>>>(
+  {
+    schemaVersion: 1,
+    title: actorSpec.actor.title,
+    description: `Configure the ${actorSpec.actor.title}.`,
+    type: 'object',
+    properties: {
+      ...customActorInput,
+      // Include the common fields in input
+      ...allActorInputs,
+    },
+  }
+);
 
 const outputSchema = createActorOutputSchema({
   actorSpecification: 1,

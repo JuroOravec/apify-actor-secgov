@@ -55,10 +55,12 @@
     "coverage": "vitest run --coverage"
   },
   "devDependencies": {
-    "@types/lodash": "^4.14.192",
+    "@types/lodash": "^4.17.5",
     "@types/node": "^18.15.11",
     "@types/node-fetch": "^2.6.3",
+    "@types/papaparse": "^5.3.14",
     "@types/pkginfo": "^0.4.0",
+    "@types/xml2js": "^0.4.14",
     "@typescript-eslint/eslint-plugin": "^4.33.0",
     "@typescript-eslint/parser": "^4.33.0",
     "eslint": "^7.32.0",
@@ -88,8 +90,10 @@
     "joi": "^17.9.1",
     "lodash": "^4.17.21",
     "node-fetch": "^2.6.6",
+    "papaparse": "^5.4.1",
     "pkginfo": "^0.4.1",
     "playwright": "^1.37.0",
-    "portadom": "^1.0.4"
+    "portadom": "^1.0.4",
+    "xml2js": "^0.6.2"
   }
 }

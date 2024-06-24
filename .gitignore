@@ -6,6 +6,10 @@ umd/*
 # apify
 storage/
 
+data
+tmp
+dist
+
 # Logs
 logs
 *.log

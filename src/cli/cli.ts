@@ -44,12 +44,12 @@ const execCmd = (cmd: string) => {
 // tasks
 // RangeError [ERR_CHILD_PROCESS_STDIO_MAXBUFFER]: stdout maxBuffer length exceeded
 const spawnCmd = (cmd: string, cmdArgs?: string[]) => {
-  console.log([cmd, ...(cmdArgs ?? [])].join(" "));
+  console.log([cmd, ...(cmdArgs ?? [])].join(' '));
   return new Promise<void>((res, rej) => {
     const prcs = spawn(cmd, cmdArgs);
     // Show stdout live - https://stackoverflow.com/a/30084906/9788634
     prcs.stdout?.pipe(process.stdout);
-    prcs.on('error', (err)=> {
+    prcs.on('error', (err) => {
       rej(err);
     });
     prcs.on('exit', (code, signal) => {

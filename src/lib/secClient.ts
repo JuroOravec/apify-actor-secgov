@@ -1,6 +1,7 @@
 import axios, { type AxiosRequestConfig } from 'axios';
 import { subMonths, format, parse, subDays } from 'date-fns';
 import cheerio, { type Cheerio } from 'cheerio';
+import xml2js from 'xml2js';
 
 interface ThirteenFFiling {
   externalId: string;
@@ -51,6 +52,27 @@ export const isXmlPrimaryDoc = (doc: Cheerio<any>) => {
 };
 export const isXmlInfoTable = (doc: Cheerio<any>) => {
   return !!doc.find('informationTable').text().trim();
+};
+
+const xmlRemovePrefixes = async (xml: string) => {
+  // Create a parser
+  const parser = new xml2js.Parser({
+    tagNameProcessors: [xml2js.processors.stripPrefix],
+  });
+
+  // Parse the XML, remove prefixes and log the result
+  const result = await parser.parseStringPromise(xml);
+
+  // Converting back to string to see the output
+  const builder = new xml2js.Builder({ renderOpts: { pretty: false } });
+  const newXml = builder.buildObject(result);
+
+  return newXml;
+};
+
+export const preprocessXml = async (xml: string) => {
+  const data = await xmlRemovePrefixes(xml);
+  return data.replace(/\s+/g, ' ');
 };
 
 export const createSecClient = (config: { baseUrl?: string; userAgent: string }) => {
@@ -175,6 +197,7 @@ export const createSecClient = (config: { baseUrl?: string; userAgent: string })
       const companyName = entry['Company Name'];
       const dateFiled = entry['Date Filed'];
 
+      // TODO - Also scrape other filing types?
       if (!THIRTEEN_F_FORM_TYPES.includes(formType)) return agg;
 
       const fullSubmissionUrl = `${baseUrl}/Archives/${filename}`;
@@ -381,7 +404,9 @@ export const createSecClient = (config: { baseUrl?: string; userAgent: string })
       const dateString = root.find('reportCalendarOrQuarter').text().trim();
       const reportDate = parse(dateString, 'MM-dd-yyyy', new Date());
 
-      // TODO Check if this works?
+      // TODO  Check if this works?
+      // TODO: Have a look at <otherManagersInfo> of
+      //       https://www.sec.gov/Archives/edgar/data/908758/0001140361-17-021232.txt
       const other_managers = root
         .find('otherManagers2Info otherManager2')
         .toArray()
@@ -389,11 +414,12 @@ export const createSecClient = (config: { baseUrl?: string; userAgent: string })
           const theEl = dom(el);
           return {
             sequence_number: parseInt(theEl.find('sequenceNumber').text().trim() || '0'),
-            file_number: theEl.find('form13FFileNumber').text().trim(),
+            file_number: theEl.find('form13FFileNumber').first().text().trim(),
             name: theEl.find('name').text().trim(),
           };
         });
 
+      // TODO - Transform to camelCase
       // prettier-ignore
       return {
         report_date: reportDate,
@@ -437,7 +463,6 @@ export const createSecClient = (config: { baseUrl?: string; userAgent: string })
         value: parseFloat(el.find('value').text().trim() || '0'),
         sharesOrPrincipalAmount: el.find('sshPrnamt').text().trim(),
         sharesOrPrincipalAmountType: el.find('sshPrnamtType').text().trim().toLowerCase(),
-        // TODO: Does this field exist?
         optionType: el.find('putCall').text().trim().toLowerCase(),
         investmentDiscretion: el.find('investmentDiscretion').text().trim().toLowerCase(),
         otherManager: el.find('otherManager').text().trim(),
@@ -448,7 +473,6 @@ export const createSecClient = (config: { baseUrl?: string; userAgent: string })
     );
   };
 
-  // TODO TEST
   const secIndexUrl = (externalId: string, directoryUrl: string): string => {
     const finalPath = [
       externalId.slice(0, 10),
@@ -457,12 +481,6 @@ export const createSecClient = (config: { baseUrl?: string; userAgent: string })
     ].join('-');
     const fullSubmissionUrl = `${directoryUrl.replace(/\/$/, '')}/${finalPath}.txt`;
     return fullSubmissionUrl.replace(/\.txt$/, '-index.html');
-  };
-
-  const get13FFilingDataUrls = async (directoryUrl: string) => {
-    const response = await getUrl(directoryUrl);
-    if (!response.data) throw Error('Invalid response for get13FFilingDataUrls');
-    return parse13FFilingDataUrlsFromDirPage(response.data);
   };
 
   const parse13FFilingDataUrlsFromDirPage = async (content: string) => {
@@ -479,36 +497,13 @@ export const createSecClient = (config: { baseUrl?: string; userAgent: string })
 
     if (xmlUrls.length === 0) throw new Error('No XML URLs found');
 
-    // E.g. 'https://www.sec.gov/Archives/edgar/data/1000097/000100009721000004/primary_doc.xml'
-    const primaryDocUrl = xmlUrls.find((url) => url.match(/primary.*doc/i));
-    // TODO: Haven't tested against actual URL yet
-    const infoTableUrl = xmlUrls.find((url) => url.match(/info.*table/i));
-
-    // TODO
-    console.log({ xmlUrls, primaryDocUrl, infoTableUrl });
-
-    return { xmlUrls, primaryDocUrl, infoTableUrl };
+    return xmlUrls;
   };
 
-  // TODO DELETE?
-  const get13FFilingXMLData = async (directoryUrl: string) => {
-    const { primaryDocUrl, infoTableUrl } = await get13FFilingDataUrls(directoryUrl);
-
-    const primaryDocXml = primaryDocUrl ? await getUrl(primaryDocUrl) : null;
-    const filingData = await parsePrimaryDocXml(primaryDocXml?.data);
-
-    const infoTableXml = infoTableUrl ? await getUrl(infoTableUrl) : null;
-    const holdings = infoTableXml?.data
-      ? await extractHoldingsFromInfoTableXml(infoTableXml.data)
-      : [];
-
-    return { ...filingData, holdings };
-
-    // TODO?
-    // Implement other necessary processing
-    // Example: this.markPreviousFilingsAsRestated();
-    // Example: this.createHoldings();
-  };
+  // TODO?
+  // Implement other necessary processing
+  // Example: this.markPreviousFilingsAsRestated();
+  // Example: this.createHoldings();
 
   const getPeriodsForLastYear = () => {
     const now = new Date();
@@ -526,7 +521,6 @@ export const createSecClient = (config: { baseUrl?: string; userAgent: string })
     get13FFilingsAll,
     get13FFilingsByPeriods,
     get13FFilingsSinceDate,
-    get13FFilingXMLData,
     generatePeriods,
     genSECIndexFileUrl,
     parse13FFilings,
@@ -535,31 +529,3 @@ export const createSecClient = (config: { baseUrl?: string; userAgent: string })
     extractHoldingsFromInfoTableXml,
   };
 };
-
-// TODO DELETE
-// This is an example instantiation and method call of the class.
-// You need to replace it with actual calls in your application logic.
-// (async () => {
-//   const client = createSecClient({
-//     userAgent: 'Sample Company Name AdminContact@<sample company domain>.com',
-//   });
-
-//   // const filings = await client.get13FFilings({ filingYear: 2021, filingQuarter: 1 });
-//   // console.log(filings);
-
-//   // const filing = filings[0];
-//   // const filingData = await client.get13FFilingXMLData(filing.directoryUrl);
-//   const filingData = await client.get13FFilingXMLData(
-//     'https://www.sec.gov/Archives/edgar/data/1000097/000100009721000004'
-//   );
-
-//   // console.log(filing);
-//   // console.log(filingData);
-
-//   // const latestFilings = await client.get13FFilingsSinceDate({ filedSince: new Date("2023-06-06") });
-//   // console.log(latestFilings);
-// })();
-
-export const secClient = createSecClient({
-  userAgent: 'Sample Company Name AdminContact@<sample company domain>.com',
-});
